@@ -1,62 +1,14 @@
-$fa = 6;
-$fs = 0.2;
-
 inch = 25.4;
 nozzle = 0.4;  // nozzle width
+layer = 0.2;  // layer height
 border = 0.45;  // filament perimeter width
-tolerance = 0.001;
-bevel = 0.4;
+overlap = layer * (1 - PI/4);  // overlap between perimeters
+// echo(4*border-3*overlap);  // width of 4 perimeters
 slope = 1.5;
+tolerance = 0.001;
 
-module symbol_ready(d=inch, b=bevel, slope=slope, inset=false) {
-    s = d / 25;
-    h = max(1.5*nozzle, b * slope);
-    bx = inset ? 0 : b;
-    wide = max(border, 1.5*s);
-    thin = max(border, 1.0*s);
-    spot = max(4*border, wide);  // counter shrinkage
-    ring = 8.0*s;  // radius of ring around crosshairs
-    xcut = inset ? border/2 + b : 2.0*s;
-    xin = inset ? 5.5*s : 4.125*s;  // inner end of crosshairs
-    xout = 10.5*s;  // outer end of crosshairs
-    difference() {
-        in = ring - wide/2;
-        out = ring + wide/2;
-        rotate_extrude()
-            polygon([[in-bx, 0], [out+bx, 0], [out, h], [in, h]]);
-        translate([0, 0, -tolerance]) scale([1, 1, (h+2*tolerance)/h])
-        for (a=[45, 135])
-            rotate([90, 0, a]) linear_extrude(d, center=true)
-                polygon([[xcut-b, 0], [xcut, h], [-xcut, h], [-xcut+b, 0]]);
-    }
-    for (a=[0:90:270]) {
-        rotate(a) {
-            if (inset) {
-                rotate([90, 0, 0]) linear_extrude(thin, center=true)
-                    polygon([[xin, 0], [xout, 0], [xout, h], [xin, h]]);
-            }
-            else hull() {
-                translate([xout, 0]) cylinder(d1=thin+2*b, d2=thin, h=h);
-                translate([xin, 0]) cylinder(d1=thin+2*b, d2=thin, h=h);
-            }
-        }
-    }
-    cylinder(d1=spot+2*bx, d2=spot, h=h);
-}
-
-module token(d=inch, b=bevel, h=undef, square=false) {
-    z = is_undef(h) ? max(inch/16, d/16) : h;
-    difference() {
-        // if (square) cube([d, d, z]) else cylinder(d=d, h=z);
-        if (square) { translate([0, 0, z/2]) cube([d, d, z], center=true); }
-        else { cylinder(d=d, h=z); }
-        translate([0, 0, z+tolerance]) mirror([0, 0, 1]) children();
-    }
-}
-
-module token_ready(d=inch, b=bevel, h=undef, square=false) {
-    token(d=d, b=b, h=h, square=square) symbol_ready(d=d, b=b, inset=true);
-}
+$fa = 6;
+$fs = layer;
 
 module test_frame(d=inch) {
     difference() {
@@ -67,6 +19,31 @@ module test_frame(d=inch) {
         translate([0, 0, nozzle/4]) cube([d, 2*nozzle, nozzle/2], center=true);
 }
 
+module extrude_symbol() {
+    linear_extrude(2*nozzle) children();
+    linear_extrude(nozzle) offset(delta=nozzle/2) children();
+}
+
+module token_die(d=16) {
+    difference() {
+        intersection() {
+            cube(d, center=true);
+            sphere(r=sqrt(2)*d/2);
+        }
+        a = [
+            [180, 0, 0],
+            [90, 90, 0],
+            [-90, 0, -90],
+            [90, 0, -90],
+            [-90, 90, 0],
+            [0, 0, 0],
+        ];
+        for (i=[0:5]) rotate(a[i])
+            translate([0, 0, d/2+tolerance]) mirror([0, 0, 1])
+                children(i < $children ? i : $children-1);
+    }
+}
+
 // echo(25 * 24/600);  // crosshairs
 // echo(25 * 36/600);  // dot diameter & circle thickness
 // echo(25 * 192/600);  // circle radius (to center of stroke)
@@ -74,8 +51,101 @@ module test_frame(d=inch) {
 // echo(25 * 99/600);  // center to inside crosshair center
 // echo(25 * 252/600);  // center to outside crosshair center
 
+module symbol_arrow(d) {
+    polygon(d/3*[[0, 1], [cos(240), sin(240)], [cos(300), sin(300)]]);
+    *translate([d/2, d/4, 0]) text("test arrow", d/2);
+}
+
+module symbol_ready(d) {
+    // TODO
+    *translate([d/2, d/4, 0]) text("ready", d/2);
+    s = d / 25;
+    wide = max(border, 1.5*s);
+    // echo(wide);
+    thin = max(border, 1.0*s);
+    // echo(thin);
+    // spot = max(4*border, wide);  // counter shrinkage
+    spot = wide;
+    // echo(spot);
+    ring = 8.0*s;  // radius of ring around crosshairs
+    xcut = max(3*border-2*overlap, 2.0*s);
+    echo(xcut-nozzle);
+    xin = 4.125*s;  // inner end of crosshairs
+    xout = 10.5*s;  // outer end of crosshairs
+    difference() {
+        circle(ring + wide/2);
+        circle(ring - wide/2);
+        for (a=[45, 135]) rotate(a) square([xcut, d], center=true);
+    }
+    for (a=[0:90:270]) {
+        rotate(a) {
+            hull() {
+                translate([xout, 0]) circle(d=thin);
+                translate([xin, 0]) circle(d=thin);
+            }
+        }
+    }
+    circle(d=spot);
+}
+
+module symbol_move(d) {
+    // TODO
+    polygon(d/3*[[0, 1], [cos(240), sin(240)], [cos(300), sin(300)]]);
+    *translate([d/2, d/4, 0]) text("move", d/2);
+}
+
+module symbol_advance(d) {
+    // TODO
+    polygon(d/3*[[0, 1], [cos(240), sin(240)], [cos(300), sin(300)]]);
+    *translate([d/2, d/4, 0]) text("advance", d/2);
+}
+
+module symbol_fall_back(d) {
+    // TODO
+    polygon(d/3*[[0, 1], [cos(240), sin(240)], [cos(300), sin(300)]]);
+    *translate([d/2, d/4, 0]) text("fall back", d/2);
+}
+
+module symbol_charge(d) {
+    // TODO
+    polygon(d/3*[[0, 1], [cos(240), sin(240)], [cos(300), sin(300)]]);
+    *translate([d/2, d/4, 0]) text("charge", d/2);
+}
+
+module symbol_shoot(d) {
+    // TODO
+    polygon(d/3*[[0, 1], [cos(240), sin(240)], [cos(300), sin(300)]]);
+    *translate([d/2, d/4, 0]) text("shoot", d/2);
+}
+
 size = 12;
-token_ready(size, square=true);
-*symbol_ready(size);
-*symbol_ready();
-*test_frame();
+
+*token_die(size) {
+    extrude_symbol() square(1, center=true);
+    extrude_symbol() square(2, center=true);
+    extrude_symbol() square(3, center=true);
+    extrude_symbol() square(4, center=true);
+    extrude_symbol() square(5, center=true);
+    extrude_symbol() square(6, center=true);
+}
+
+*token_die(size) {
+    #extrude_symbol(engrave=true) symbol_ready(size-2);
+    #extrude_symbol() symbol_ready(size-2);
+    #extrude_symbol() symbol_ready(size-2);
+    #extrude_symbol() symbol_ready(size-2);
+    #extrude_symbol() symbol_ready(size-2);
+    #extrude_symbol() symbol_ready(size-2);
+}
+
+token_die(size) extrude_symbol() symbol_ready(size-2);
+*token_die(size) linear_extrude(2*nozzle) symbol_ready(size-2);
+
+*token_die(size) {
+    extrude_symbol() symbol_ready(size-2);
+    extrude_symbol() symbol_move(size-2);
+    extrude_symbol() symbol_advance(size-2);
+    extrude_symbol() symbol_fall_back(size-2);
+    extrude_symbol() symbol_charge(size-2);
+    extrude_symbol() symbol_shoot(size-2);
+}
